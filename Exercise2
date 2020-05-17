@@ -1,0 +1,145 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+
+
+os.chdir("D:/BOOKS/Machine Learning/Andrew Ng/Week2/machine-learning-ex1/ex1")
+
+path = 'ex1data1.txt'
+data = pd.read_csv(path, header = None, names = ['Population', 'Profit'])
+
+data.head()
+data.tail()
+data.describe()
+data.info()
+
+data.plot(kind="scatter", x= "Population", y= "Profit", figsize=(8,5))
+plt.show()
+
+"""cost function"""
+def computeCost(X, y , theta):
+    inner = np.power(((X * theta.T) - y), 2)
+    return np.sum(inner) / (2*len(X))
+
+data.insert(0, "Ones", 1) # add 1 column for calculating cost and gradient
+data
+
+cols = data.shape[1]
+X = data.iloc[:,0:cols-1]
+y = data.iloc[:, cols-1:cols]
+
+X.head()
+y.head()
+
+
+X = np.matrix(X.values)
+y = np.matrix(y.values)
+# transfer np.matrix for the cost function
+theta = np.matrix([0,0])
+
+X.shape, y.shape, theta.shape
+# ensure the dimension are correct
+
+computeCost(X, y, theta)
+
+"""batch gradient descent"""
+X.shape, theta.shape, y.shape, X.shape[0]
+
+def gradientDescent(X, y, theta, alpha,epoch):
+    """return theta, cost"""
+    
+    temp = np.matrix(np.zeros(theta.shape)) # initialize theta matrix(1,2)
+    parameters = int(theta.flatten().shape[1]) # the number of theta
+    cost = np.zeros(epoch)
+    m = X.shape[0]
+    
+    for i in range(epoch):
+        temp = theta - (alpha / m) * (X * theta.T - y).T *X
+        theta = temp
+        cost[i] = computeCost(X, y, theta)
+    
+    return theta, cost
+
+alpha = 0.01 # learning rate
+epoch = 1000
+
+final_theta, cost = gradientDescent(X, y, theta, alpha, epoch)
+computeCost(X, y, final_theta)
+
+x = np.linspace(data.Population.min(), data.Population.max(), 100)
+# it will be the xlabel (seperate into 100 portion)
+f = final_theta[0, 0] + (final_theta[0,1] * x)
+
+fig, ax =  plt.subplots(figsize=(6,4)) # ax can be other name
+ax.plot(x, f, 'r', label='Prediction')
+ax.scatter(data['Population'], data.Profit, label='Traning Data')
+ax.legend(loc=2)
+ax.set_xlabel('Population')
+ax.set_ylabel('Profit')
+ax.set_title('Predicted Profit vs. Population Size')
+plt.show()
+
+fig, ax = plt.subplots(figsize=(8,4))
+ax.plot(np.arange(epoch), cost, 'r') # np.arange will return equivalence
+ax.set_xlabel('Iterations')
+ax.set_ylabel('Cost')
+ax.set_title('Error vs. Training Epoch')
+plt.show()
+
+
+""" Multivariate linear regression """
+path = 'ex1data2.txt'
+data2 = pd.read_csv(path, names=['Size', 'Bedrooms', 'Price'])
+data2.head()
+
+#feature scaling
+data2 = (data2 - data2.mean())/data2.std()
+data2.head()
+
+data2.insert(0, 'Ones', 1)
+
+cols = data2.shape[1]
+X2 = data2.iloc[:,0:cols-1]
+y2 = data2.iloc[:,cols-1:cols]
+
+X2 = np.matrix(X2.values)
+y2 = np.matrix(y2.values)
+theta2 = np.matrix(np.array([0,0,0]))
+
+g2, cost2 = gradientDescent(X2, y2, theta2, alpha, epoch)
+
+computeCost(X2, y2, g2), g2
+
+fig, ax = plt.subplots(figsize=(12,8))
+ax.plot(np.arange(epoch), cost2, 'r')
+ax.set_xlabel('Iterations')
+ax.set_ylabel('Cost')
+ax.set_title('Error vs. Training Epoch')
+plt.show()
+
+"""if use scikit-learn"""
+from sklearn import linear_model
+model = linear_model.LinearRegression()
+model.fit(x,y)
+
+x = np.array(X[:, 1].A1)
+f = model.predict(X).flatten()
+
+fig, ax = plt.subplots(figsize=(8,5))
+ax.plot(x, f, 'r',  label='Prediction')
+ax.scatter(data.Population, data.Profit, label = 'Training Data')
+ax.legend(loc=2)
+ax.set_xlabel("Population")
+ax.set_ylabel("Profit")
+ax.set_title("Predicted Profit vs. Population Size")
+plt.show()
+
+
+""" normal equation """
+def normalEqn(X, y):
+    theta = np.linalg.inv(X.T@X)@X.T@y # X.T@X = X.T.dot(X)
+    return theta
+
+final_theta2 = normalEqn(X, y)
+final_theta2
