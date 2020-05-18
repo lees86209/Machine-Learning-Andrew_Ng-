@@ -1,0 +1,174 @@
+""" 1 multiple logistic regression"""
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.io import loadmat
+
+""" 1.1 Data """
+os.chdir('D:/BOOKS/Machine Learning/Andrew Ng/Week4/machine-learning-ex3/ex3')
+def load_data(path):
+    data = loadmat(path)
+    X = data['X']
+    y = data['y']
+    return X,y
+
+X, y = load_data('ex3data1.mat')
+print(np.unique(y))
+
+X.shape, y.shape
+
+""" 1.2 Visualizing the data """
+def plot_an_image(X):
+    # random choose the number
+    pick_one = np.random.randint(0, 5000)
+    image = X[pick_one, :]
+    fig, ax = plt.subplots(figsize = (1, 1))
+    ax.matshow(image.reshape((20, 20)), cmap = 'gray_r')
+    plt.xticks([]) # this will remove the scale for the cleanliness
+    plt.yticks([])
+    plt.show()
+    print('this should be {}'.format(y[pick_one]))
+
+plot_an_image(X)
+# it will plot the random image which is from X dataset
+
+def plot_100_image(X):
+    # random choose the amount of 100 number
+    sample_idx = np.random.choice(np.arange(X.shape[0]), 100)
+    sample_images = X[sample_idx, :] #(100,400)
+    
+    fig, ax_array = plt.subplots(nrows=10, ncols = 10, sharey = True, sharex = True, figsize = (8,8))
+    
+    for row in range(10):
+        for column in range(10):
+            ax_array[row, column].matshow(sample_images[10 * row + column].reshape((20,20)),
+                                         cmap = "gray_r")
+
+plot_100_image(X)
+plt.xticks([])
+plt.yticks([])
+plt.show()
+
+""" 1.3 Vectorizing Logistic Regression """
+# this we can avoid to use loop,  it will improve the computing performance
+""" 1.3.1 Vectorizing the cost function """
+def sigmoid(z):
+    return 1 / (1 + np.exp(-z))
+
+def regularized_cost(theta, X, y, l):
+    """
+    do not penalize theta_0
+    args:
+        X: feature matrix, (m, n+1) # insert x0=1
+        y: target vector, 9m, )
+    l: lambda constant for regularization
+    """
+    thetaReg = theta[1:]
+    first = (-y*np.log(sigmoid(X@theta))) + (y-1)*np.log(1-sigmoid(X@theta))
+    reg = (thetaReg@thetaReg)*1 / (2*len(X))
+    return np.mean(first) +reg
+
+""" 1.3.2 Vectorizing the gradient """
+def regularized_gradient(theta, X, y, l):
+    """
+    do not penalize theta_0
+    args:
+        X: feature matrix, (m, n+1) # insert x0=1
+        y: target vector, 9m, )
+    l: lambda constant for regularization
+    """
+    thetaReg = theta[1:]
+    first = (1 / len(X)) * X.T @ (sigmoid(X @ theta) - y)
+    # this is make the calculating easier
+    reg = np.concatenate([np.array([0]), (l / len(X)) * thetaReg])
+    return first + reg
+
+""" 1.4 One-vs-all Classification """
+from scipy.optimize import minimize
+
+def one_vs_all(X, y, l, K):
+    """
+    generalized logistic regression
+    args:
+        X: feature matrix, (m, n+1) # with incercept x0=1
+        y: target vector, (m, )
+        l: lambda constant for regularization
+        K: numbel of labels
+    return: trained parameters
+    """
+    all_theta = np.zeros((K, X.shape[1])) # (10, 401)
+    
+    for i in range(1, K+1):
+        theta = np.zeros(X.shape[1])
+        y_i = np.array([1 if label == i else 0 for label in y])
+        ret = minimize(fun = regularized_cost, x0 = theta, args=(X, y_i, l), method = 'TNC',
+                       jac = regularized_gradient, options={'disp': True})
+        all_theta[i-1,:] = ret.x # this is lower case letter 'x'
+        
+    return all_theta
+"""   above
+this is add a constant term (X0) for calcute intercept
+distinguish y to 1 or 0
+"""
+
+def predict_all(X, all_theta):
+    # compute the class probability for each class on each training instance   
+    h = sigmoid(X @ all_theta.T)
+    # create array of the index with the maximum probability
+    # Returns the indices of the maximum values along an axis.
+    h_argmax = np.argmax(h, axis=1)
+    # because our array was zero-indexed we need to add one for the true label prediction
+    h_argmax = h_argmax + 1
+    
+    return h_argmax
+
+# h has 5000 rows and 10 columns
+# each row means one sample
+# h_argmax is prediction of the sample
+
+raw_X, raw_y = load_data("ex3data1.mat")
+X = np.insert(raw_X, 0, 1, axis = 1) #(5000, 401)
+y = raw_y.flatten() # y.reshape(-1), it will convience for consquently calculate
+
+all_theta = one_vs_all(X, y, 1, 10)
+all_theta # each row is each parameter of classification
+
+y_pred = predict_all(X, all_theta)
+accuracy = np.mean(y_pred == y)
+print("accuracy = {0}%".format(accuracy * 100))
+
+
+""" 2 Neural Networks """
+
+def load_weight(path):
+    data = loadmat(path)
+    return data["Theta1"], data["Theta2"]
+
+theta1, theta2 = load_weight('ex3weights.mat')
+
+theta1.shape, theta2.shape
+
+X, y = load_data("ex3data1.mat")
+y = y.flatten()
+X = np.insert(X, 0, values = np.ones(X.shape[0]), axis = 1) # intercept
+
+X.shape, y.shape
+
+a1 = X
+z2 = a1 @ theta1.T
+z2.shape
+
+z2 = np.insert(z2, 0, 1, axis = 1)
+
+a2 = sigmoid(z2)
+a2.shape
+
+z3 = a2 @ theta2.T
+z3.shape
+
+a3 = sigmoid(z3)
+a3.shape
+y_pred = np.argmax(a3, axis = 1) + 1
+accuracy = np.mean(y_pred ==y )
+print("accuracy = {0}%".format(accuracy * 100))
