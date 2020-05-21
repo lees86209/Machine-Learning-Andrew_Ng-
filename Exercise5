@@ -1,0 +1,196 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.io import loadmat
+import scipy.optimize as opt
+
+os.chdir("D:/BOOKS/Machine Learning/Andrew Ng/Week6/machine-learning-ex5/ex5")
+
+
+""" 1. Regularized Linear Regression """
+""" 1.1 visualizing data """
+path = 'ex5data1.mat'
+data = loadmat(path)
+#Training set
+X, y = data['X'], data['y']
+#Cross validation set
+Xval, yval = data['Xval'], data['yval']
+#Test set
+Xtest, ytest = data['Xtest'], data['ytest']
+#Insert a column of 1's to all of the X's, as usual
+X = np.insert(X,0,1,axis=1)
+Xval = np.insert(Xval ,0,1,axis=1)
+Xtest = np.insert(Xtest,0,1,axis=1)
+print('X={},y={}'.format(X.shape, y.shape))
+print('Xval={},yval={}'.format(Xval.shape, yval.shape))
+print('Xtest={},ytest={}'.format(Xtest.shape, ytest.shape))
+
+
+def plotData(X, y):
+    plt.figure(figsize=(8,5))
+    plt.scatter(X[:,1:], y, c='r', marker='o')
+    plt.xlabel('Change in water level (x)')
+    plt.ylabel('Water flowing out of the dam (y)')
+    plt.grid(True)
+
+plotData(X, y)
+
+
+""" 1.2 Regularized linear regression cost function """
+def costReg(theta, X, y, l):
+    '''do not regularizethe theta0
+    theta is a 1-d array with shape (n+1,)
+    X is a matrix with shape (m, n+1)
+    y is a matrix with shape (m, 1)
+    '''
+    cost = ((X @ theta - y.flatten()) ** 2).sum()
+    regterm = l * (theta[1:] @ theta[1:])
+    return (cost + regterm) / (2 * len(X))
+
+theta = np.ones(X.shape[1])
+print(costReg(theta, X, y, 1))  
+
+""" 1.3 Regularized linear regression gradient """
+def gradientReg(theta, X, y, l):
+    """
+    theta: 1-d array with shape (2,)
+    X: 2-d array with shape (12, 2)
+    y: 2-d array with shape (12, 1)
+    l: lambda constant
+    grad has same shape as theta (2,)
+    """
+    grad = (X @ theta - y.flatten()) @ X
+    regterm = l * theta
+    regterm[0] = 0  # #don't regulate bias term
+    return (grad + regterm) / len(X)
+
+# Using theta initialized at [1; 1] it be expected to see a 
+# gradient of [-15.303016; 598.250744] (with lambda=1)
+
+print(gradientReg(theta, X, y, 1))
+
+""" 1.4 Fitting linear regression """
+def trainLinearReg(X, y, l):
+    theta = np.zeros(X.shape[1])
+    res = opt.minimize(fun=costReg, 
+                       x0=theta, 
+                       args=(X, y ,l), 
+                       method='TNC', 
+                       jac=gradientReg)
+    return res.x
+
+fit_theta = trainLinearReg(X, y, 0)
+plotData(X, y)
+plt.plot(X[:,1], X @ fit_theta)
+""" here we set lambda = 0, because these linear regression only have two parameters
+. Therefore, Regularization is not really help to calculate. """
+
+""" 2. Bias-variance """
+""" 2.1 learning curves """
+def plot_learning_curve(X, y, Xval, yval, l):
+    # plot learning curve(the amount of change about change of cross validation error and training error )
+    xx = range(1, len(X) + 1)  # at least has one example 
+    training_cost, cv_cost = [], []
+    for i in xx:
+        res = trainLinearReg(X[:i], y[:i], l)
+        training_cost_i = costReg(res, X[:i], y[:i], 0)
+        cv_cost_i = costReg(res, Xval, yval, 0)
+        training_cost.append(training_cost_i)
+        cv_cost.append(cv_cost_i)
+        
+    plt.figure(figsize=(8,5))
+    plt.plot(xx, training_cost, label='training cost')  
+    plt.plot(xx, cv_cost, label='cv cost') 
+    plt.legend()
+    plt.xlabel('Number of training examples')
+    plt.ylabel('Error')
+    plt.title('Learning curve for linear regression')
+    plt.grid(True)
+    
+plot_learning_curve(X, y, Xval, yval, 0)
+
+""" 3. Polynomial regression """
+""" 3.1 Learning polynomial regression """
+def genPolyFeatures(X, power):
+    """
+    add polynomial features, add secon column's i+2 power to array's last column(each time)
+    start to insert from square (because it has one colunn one power)
+    """
+    Xpoly = X.copy()
+    for i in range(2, power + 1):
+        Xpoly = np.insert(Xpoly, Xpoly.shape[1], np.power(Xpoly[:,1], i), axis=1)
+    return Xpoly
+
+def get_means_std(X):
+    """ obtain mean and error of training set to standardize the data"""
+    means = np.mean(X,axis=0)
+    stds = np.std(X,axis=0,ddof=1)  # ddof=1 means standard deviationn of sample
+    return means, stds
+
+def featureNormalize(myX, means, stds):
+    # standardize
+    X_norm = myX.copy()
+    X_norm[:, 1:] = X_norm[:, 1:] - means[1:]
+    X_norm[:, 1:] = X_norm[:, 1:] / stds[1:]
+    return X_norm
+
+
+power = 6 # extand to power 6
+
+train_means, train_stds = get_means_std(genPolyFeatures(X,power))
+X_norm = featureNormalize(genPolyFeatures(X,power), train_means, train_stds)
+Xval_norm = featureNormalize(genPolyFeatures(Xval,power), train_means, train_stds)
+Xtest_norm = featureNormalize(genPolyFeatures(Xtest,power), train_means, train_stds)
+
+def plot_fit(means, stds, l):
+    # fitting curve
+    theta = trainLinearReg(X_norm,y, l)
+    x = np.linspace(-75,55,50)
+    xmat = x.reshape(-1, 1)
+    xmat = np.insert(xmat,0,1,axis=1)
+    Xmat = genPolyFeatures(xmat, power)
+    Xmat_norm = featureNormalize(Xmat, means, stds)
+    plotData(X, y)
+    plt.plot(x, Xmat_norm@theta,'b--')
+    
+plot_fit(train_means, train_stds, 0)
+plot_learning_curve(X_norm, y, Xval_norm, yval, 0)
+
+
+""" 3.2 Adjusting the regularization parameter """
+# set lambda = 1
+plot_fit(train_means, train_stds, 1)
+plot_learning_curve(X_norm, y, Xval_norm, yval, 1)
+
+# set lambda = 100
+plot_fit(train_means, train_stds, 100)
+plot_learning_curve(X_norm, y, Xval_norm, yval, 100)
+
+""" 3.3 selecting lambda using a cross validation set """
+lambdas = [0.,0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1., 3., 10.]
+errors_train, errors_val = [], []
+
+for l in lambdas:
+    theta = trainLinearReg(X_norm, y, l)
+    errors_train.append(costReg(theta,X_norm,y,0))  # 记得把lambda = 0
+    errors_val.append(costReg(theta,Xval_norm,yval,0))
+    
+plt.figure(figsize=(8,5))
+plt.plot(lambdas,errors_train,label='Train')
+plt.plot(lambdas,errors_val,label='Cross Validation')
+plt.legend()
+plt.xlabel('lambda')
+plt.ylabel('Error')
+plt.grid(True)
+
+
+""" computing test set error """
+# In our cross validation, we obtained a test error of 3.8599 for λ = 3.
+# if use power = 6 then it not equal to 3.8599.
+# if use power =  8 then it can obtain the 3.8599
+
+theta = trainLinearReg(X_norm, y, 3)
+print('test cost(l={}) = {}'.format(3, costReg(theta, Xtest_norm, ytest, 0)))
+# for l in lambdas:
+#     theta = trainLinearReg(X_norm, y, l)
+#     print('test cost(l={}) = {}'.format(l, costReg(theta, Xtest_norm, ytest, 0)))
