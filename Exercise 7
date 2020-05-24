@@ -1,0 +1,258 @@
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.io import loadmat
+
+os.chdir("D:/BOOKS/Machine Learning/Andrew Ng/Week8/machine-learning-ex7/ex7")
+
+def findClosestCentroids(X, centroids):
+    """
+    output a one-dimensional array idx that holds the 
+    index of the closest centroid to every training example.
+    """
+    idx = []
+    max_dist = 1000000  # Limit the maximum distance
+    for i in range(len(X)):
+        minus = X[i] - centroids  # here use numpy's broadcasting
+        dist = minus[:,0]**2 + minus[:,1]**2
+        if dist.min() < max_dist:
+            ci = np.argmin(dist)
+            idx.append(ci)
+    return np.array(idx)
+
+mat = loadmat("D:/BOOKS/Machine Learning/Andrew Ng/Week8/machine-learning-ex7/ex7/ex7data2.mat")
+# print(mat.keys())
+X = mat['X']
+init_centroids = np.array([[3, 3], [6, 2], [8, 5]])
+idx = findClosestCentroids(X, init_centroids)
+print(idx[0:3])
+
+""" 1.1.2 Computing centroid means"""
+def computeCentroids(X, idx):
+    centroids = []
+    for i in range(len(np.unique(idx))):  # np.unique() means K
+        u_k = X[idx==i].mean(axis=0)  # each mean of column
+        centroids.append(u_k)
+        
+    return np.array(centroids)
+
+computeCentroids(X, idx)
+
+""" 1.2 K-means on example dataset """
+def plotData(X, centroids, idx=None):
+    """
+    Visualize the data and automatically color them separately.
+     idx: the idx vector generated in the last iteration, storing the value of the cluster center assigned to each sample
+     centroids: contains the history of each center point
+    """
+    colors = ['b','g','gold','darkorange','salmon','olivedrab', 
+              'maroon', 'navy', 'sienna', 'tomato', 'lightgray', 'gainsboro'
+             'coral', 'aliceblue', 'dimgray', 'mintcream', 'mintcream']
+    
+    assert len(centroids[0]) <= len(colors), 'colors not enough '
+      
+    subX = []  # Sample points of semicolon
+    if idx is not None:
+        for i in range(centroids[0].shape[0]):
+            x_i = X[idx == i]
+            subX.append(x_i)
+
+    else:
+        subX = [X]  # Convert X into a list of elements, each element is a sample set of each cluster, which is convenient for drawing below
+    
+    # Draw the dots of each cluster separately, with different colors
+    plt.figure(figsize=(8,5))    
+    for i in range(len(subX)):
+        xx = subX[i]
+        plt.scatter(xx[:,0], xx[:,1], c=colors[i], label='Cluster %d'%i)
+    plt.legend()
+    plt.grid(True)
+    plt.xlabel('x1',fontsize=14)
+    plt.ylabel('x2',fontsize=14)
+    plt.title('Plot of X Points',fontsize=16)
+    
+    # Draw the trajectory of the center point of the cluster
+    xx, yy = [], []
+    for centroid in centroids:
+        xx.append(centroid[:,0])
+        yy.append(centroid[:,1])
+    
+    plt.plot(xx, yy, 'rx--', markersize=8)
+                         
+plotData(X, [init_centroids])
+
+
+
+def runKmeans(X, centroids, max_iters):
+    K = len(centroids)
+    
+    centroids_all = []
+    centroids_all.append(centroids)
+    centroid_i = centroids
+    for i in range(max_iters):
+        idx = findClosestCentroids(X, centroid_i)
+        centroid_i = computeCentroids(X, idx)
+        centroids_all.append(centroid_i)
+    
+    return idx, centroids_all
+    
+idx, centroids_all = runKmeans(X, init_centroids, 20)
+plotData(X, centroids_all, idx)
+
+
+""" 1.3 random initialization """
+def initCentroids(X, K):
+    """Random initialization"""
+    m, n = X.shape
+    idx = np.random.choice(m, K)
+    centroids = X[idx]
+    
+    return centroids
+
+for i in range(3):
+    centroids = initCentroids(X, 3)
+    idx, centroids_all = runKmeans(X, centroids, 10)
+    plotData(X, centroids_all, idx)
+    
+""" 1.4 image compression with K-means """
+""" 1.4.1 K-means on pixels """
+from skimage import io
+
+A = io.imread("D:/BOOKS/Machine Learning/Andrew Ng/Week8/machine-learning-ex7/ex7/bird_small.png")
+print(A.shape)
+plt.imshow(A);
+A = A/255.  # Divide by 255 so that all values are in the range 0 - 1
+
+
+#  Reshape the image into an (N,3) matrix where N = number of pixels.
+#  Each row will contain the Red, Green and Blue pixel values
+#  This gives us our dataset matrix X that we will use K-Means on.
+X = A.reshape(-1, 3)
+K = 16
+centroids = initCentroids(X, K)
+idx, centroids_all = runKmeans(X, centroids, 10)
+
+img = np.zeros(X.shape)
+centroids = centroids_all[-1]
+
+for i in range(len(centroids)):
+    img[idx == i] = centroids[i]
+    
+img = img.reshape((128, 128, 3))
+
+fig, axes = plt.subplots(1, 2, figsize=(12,6))
+axes[0].imshow(A)
+axes[1].imshow(img)
+
+""" 2. principal component analysis """
+""" 2.1 example dataset """
+mat = loadmat("D:/BOOKS/Machine Learning/Andrew Ng/Week8/machine-learning-ex7/ex7/ex7data1.mat")
+X = mat['X']
+print(X.shape)
+plt.scatter(X[:,0], X[:,1], facecolors='none', edgecolors='b')
+
+""" 2.2 implementing PCA """
+def featureNormalize(X):
+    means = X.mean(axis=0)
+    stds = X.std(axis=0, ddof=1)
+    X_norm = (X - means) / stds
+    return X_norm, means, stds
+
+def pca(X):
+    sigma = (X.T @ X) / len(X)
+    U, S, V = np.linalg.svd(sigma)
+    
+    return U, S, V
+
+X_norm, means, stds = featureNormalize(X)
+U, S, V = pca(X_norm)
+
+print(U[:,0]) 
+plt.figure(figsize=(7, 5))
+plt.scatter(X[:,0], X[:,1], facecolors='none', edgecolors='b')
+
+plt.plot([means[0], means[0] + 1.5*S[0]*U[0,0]], 
+         [means[1], means[1] + 1.5*S[0]*U[0,1]],
+        c='r', linewidth=3, label='First Principal Component')
+plt.plot([means[0], means[0] + 1.5*S[1]*U[1,0]], 
+         [means[1], means[1] + 1.5*S[1]*U[1,1]],
+        c='g', linewidth=3, label='Second Principal Component')
+plt.grid()
+# changes limits of x or y axis so that equal increments of x and y have the same length
+plt.axis("equal")  
+plt.legend()
+
+
+""" 2.3 dimensionality reduction with PCA """
+""" 2.3.1 projecting the data onto the principal components """
+def projectData(X, U, K):
+    Z = X @ U[:,:K]
+    
+    return Z
+
+# project the first example onto the first dimension 
+# and you should see a value of about 1.481
+Z = projectData(X_norm, U, 1)
+Z[0]
+
+
+""" 2.3.2 reconstructing an approximation of the data """
+def recoverData(Z, U, K):
+    X_rec = Z @ U[:,:K].T
+    
+    return X_rec
+
+# you will recover an approximation of the first example and you should see a value of
+# about [-1.047 -1.047].
+X_rec = recoverData(Z, U, 1)
+X_rec[0]
+
+""" 2.3.3 visualizing the projections """
+plt.figure(figsize=(7,5))
+plt.axis("equal") 
+plot = plt.scatter(X_norm[:,0], X_norm[:,1], s=30, facecolors='none', 
+                   edgecolors='b',label='Original Data Points')
+plot = plt.scatter(X_rec[:,0], X_rec[:,1], s=30, facecolors='none', 
+                   edgecolors='r',label='PCA Reduced Data Points')
+
+plt.title("Example Dataset: Reduced Dimension Points Shown",fontsize=14)
+plt.xlabel('x1 [Feature Normalized]',fontsize=14)
+plt.ylabel('x2 [Feature Normalized]',fontsize=14)
+plt.grid(True)
+
+for x in range(X_norm.shape[0]):
+    plt.plot([X_norm[x,0],X_rec[x,0]],[X_norm[x,1],X_rec[x,1]],'k--')
+    # Enter the first item is all X coordinates, the second item is Y coordinates
+plt.legend()
+
+""" 2.4 face image dataset """
+mat = loadmat("D:/BOOKS/Machine Learning/Andrew Ng/Week8/machine-learning-ex7/ex7/ex7faces.mat")
+X = mat['X']
+print(X.shape)
+
+def displayData(X, row, col):
+    fig, axs = plt.subplots(row, col, figsize=(8,8))
+    for r in range(row):
+        for c in range(col):
+            axs[r][c].imshow(X[r*col + c].reshape(32,32).T, cmap = 'Greys_r')
+            axs[r][c].set_xticks([])
+            axs[r][c].set_yticks([])
+            
+displayData(X, 10, 10)
+
+""" 2.4.1 PCA on Faces """
+X_norm, means, stds = featureNormalize(X)
+
+U, S, V = pca(X_norm)
+
+U.shape, S.shape
+
+displayData(U[:, :36].T, 6, 6)
+
+""" 2.4.2 dimensionality reduction """
+z = projectData(X_norm, U, K = 36)
+
+X_rec = recoverData(z, U, K=36)
+
+displayData(X_rec, 10, 10)
