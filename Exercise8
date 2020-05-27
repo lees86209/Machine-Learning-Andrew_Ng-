@@ -1,0 +1,376 @@
+import os
+import pandas as pd
+import numpy as np
+from scipy.io import loadmat
+import matplotlib.pyplot as plt
+
+os.chdir("D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8")
+mat = loadmat('D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/ex8data1.mat')
+print(mat.keys())
+# dict_keys(['__header__', '__version__', '__globals__', 'X', 'Xval', 'yval'])
+X = mat['X']
+Xval, yval = mat['Xval'], mat['yval']
+X.shape, Xval.shape, yval.shape
+# ((307, 2), (307, 2), (307, 1))
+
+def plot_data():
+    plt.figure(figsize=(8,5))
+    plt.plot(X[:,0], X[:,1], 'bx')
+    # plt.scatter(Xval[:,0], Xval[:,1], c=yval.flatten(), marker='x', cmap='rainbow')
+    
+plot_data()
+
+""" 1.1 Gaussian distribution """
+def gaussian(X, mu, sigma2):
+    """
+    mu, sigma2 parameters have determined a Gaussian distribution model
+    Because the original model is a multivariate Gaussian model, it is a diagonal matrix on sigma2, so it is as follows:
+    If Sigma2 is a matrix, it is treated as the covariance matrix. 
+    If Sigma2 is a vector, it is treated as the sigma^2 values of the variances
+    in each dimension (a diagonal covariance matrix)
+    output:
+        An (m,) dimensional vector containing the probability value of each sample.
+    """
+# If you want to use matrix multiplication to solve the terms in exp (), you must pay attention to the transformation of dimensions.
+# In fact, we only need to take the diagonal elements. (Similar to variance instead of wanting covariance)
+# Finally, get a (m,) vector, containing the probability of each sample, instead of wanting a (m, m) matrix
+# Note here that when the matrix is too large, a memory error will occur when the numpy matrix is multiplied. For example, a 90,000-dimensional matrix. So you can't generate too much data when drawing
+
+#     n = len(mu) 
+    
+#     if np.ndim(sigma2) == 1:
+#         sigma2 = np.diag(sigma2)
+
+#     X = X - mu
+#     p1 = np.power(2 * np.pi, -n/2)*np.sqrt(np.linalg.det(sigma2))
+#     e = np.diag(X@np.linalg.inv(sigma2)@X.T)  # Take diagonal elements, similar to variance, not covariance
+#     p2 = np.exp(-.5*e)
+    
+#     return p1 * p2
+
+# The following is a solution that does not use a matrix, which is equivalent to entering each row of data without memory errors.
+
+    m, n = X.shape
+    if np.ndim(sigma2) == 1:
+        sigma2 = np.diag(sigma2)
+
+    norm = 1./(np.power((2*np.pi), n/2)*np.sqrt(np.linalg.det(sigma2)))
+    exp = np.zeros((m,1))
+    for row in range(m):
+        xrow = X[row]
+        exp[row] = np.exp(-0.5*((xrow-mu).T).dot(np.linalg.inv(sigma2)).dot(xrow-mu))
+    return norm*exp
+
+""" 1.2 Estimating parameters for a Gaussian """
+def getGaussianParams(X, useMultivariate):
+    """
+    The input X is the dataset with each n-dimensional data point in one row
+    The output is an n-dimensional vector mu, the mean of the data set 
+    the variances sigma^2, an n x 1 vector Or (n, n) matrix, if you use multivariate Gaussian function
+    In the homework, the sample variance is divided by m instead of m-1, but the effect is not much worse.
+    """
+    mu = X.mean(axis=0)
+    if useMultivariate:    
+        sigma2 = ((X-mu).T @ (X-mu)) / len(X)
+    else:
+        sigma2 = X.var(axis=0, ddof=0)  # sample variance
+    
+    return mu, sigma2
+
+
+def plotContours(mu, sigma2):
+    """
+    Plotting the Gaussian probability distribution is a convex surface in three dimensions. The projection onto the plane is a circle of contours
+    """
+    delta = .3  # Note that delta cannot be too small! Otherwise, too much data will be generated, resulting in memory errors when matrix multiplication
+    x = np.arange(0,30,delta)
+    y = np.arange(0,30,delta)
+    
+    # This part needs to be transformed into a coordinate matrix in the form of X, that is, one column is the abscissa and one column is the ordinate
+    # then it can be passed into gaussian and solved to get the probability value of each point
+    xx, yy = np.meshgrid(x, y)
+    points = np.c_[xx.ravel(), yy.ravel()]  # Combine by column, one column of abscissa and one column of ordinate
+    z = gaussian(points, mu, sigma2)
+    z = z.reshape(xx.shape)  # this step need to be remember
+    
+    cont_levels = [10**h for h in range(-20,0,3)]
+    plt.contour(xx, yy, z, cont_levels)  # The levels are the reference given in the assignment, or derived from the probability of solving
+
+    plt.title('Gaussian Contours',fontsize=16)
+
+
+# First contours without using multivariate gaussian:
+plot_data()
+useMV = False
+plotContours(*getGaussianParams(X, useMV))
+
+# Then contours with multivariate gaussian:
+plot_data()
+useMV = True
+# * representation tuple
+plotContours(*getGaussianParams(X, useMV))
+
+
+""" 1.3 Selecting the threshold, ε """
+def selectThreshold(yval, pval):
+    def computeF1(yval, pval):
+        m = len(yval)
+        tp = float(len([i for i in range(m) if pval[i] and yval[i]]))
+        fp = float(len([i for i in range(m) if pval[i] and not yval[i]]))
+        fn = float(len([i for i in range(m) if not pval[i] and yval[i]]))
+        prec = tp/(tp+fp) if (tp+fp) else 0
+        rec = tp/(tp+fn) if (tp+fn) else 0
+        F1 = 2*prec*rec/(prec+rec) if (prec+rec) else 0
+        return F1
+   
+    epsilons = np.linspace(min(pval), max(pval), 1000)
+    bestF1, bestEpsilon = 0, 0
+    for e in epsilons:
+        pval_ = pval < e
+        thisF1 = computeF1(yval, pval_)
+        if thisF1 > bestF1:
+            bestF1 = thisF1
+            bestEpsilon = e
+
+    return bestF1, bestEpsilon
+
+
+mu, sigma2 = getGaussianParams(X, useMultivariate=False)
+pval = gaussian(Xval, mu, sigma2)
+bestF1, bestEpsilon = selectThreshold(yval, pval)  
+
+y = gaussian(X, mu, sigma2)  # probability of X
+xx = np.array([X[i] for i in range(len(y)) if y[i] < bestEpsilon])
+xx  # Outlier
+
+plot_data()
+plotContours(mu, sigma2)
+plt.scatter(xx[:,0], xx[:,1], s=80, facecolors='none', edgecolors='r')
+
+
+""" High dimensional dataset """
+mat = loadmat( 'D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/ex8data2.mat' )
+X2 = mat['X']
+Xval2, yval2 = mat['Xval'], mat['yval']
+X2.shape
+
+mu, sigma2 = getGaussianParams(X2, useMultivariate=False)
+ypred = gaussian(X2, mu, sigma2)
+
+yval2pred = gaussian(Xval2, mu, sigma2)
+
+# You should see a value epsilon of about 1.38e-18, and 117 anomalies found.
+bestF1, bestEps = selectThreshold(yval2, yval2pred)
+anoms = [X2[i] for i in range(X2.shape[0]) if ypred[i] < bestEps]
+bestEps, len(anoms)
+
+
+
+""" 2.Recommender systems """
+""" 2.1 Movie ratings dataset """
+mat = loadmat('D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/ex8_movies.mat')
+print(mat.keys())
+Y, R = mat['Y'], mat['R']
+nm, nu = Y.shape  # 0 in Y means that the user has no rating
+nf = 100
+Y.shape, R.shape
+# ((1682, 943), (1682, 943))
+
+Y [0] .sum () / R [0] .sum () # The numerator represents the total score of the first movie, and the denominator represents how much rating data this movie has
+
+# "Visualize the ratings matrix"
+fig = plt.figure(figsize=(8,8*(1682./943.)))
+plt.imshow(Y, cmap='rainbow')
+plt.colorbar()
+plt.ylabel('Movies (%d)'%nm,fontsize=20)
+plt.xlabel('Users (%d)'%nu,fontsize=20)
+
+
+""" 2.2 Collaborative filtering learning algorithm """
+mat = loadmat('D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/ex8_movieParams.mat')
+X = mat['X']
+Theta = mat['Theta']
+nu = int(mat['num_users'])
+nm = int(mat['num_movies'])
+nf = int(mat['num_features'])
+# For now, reduce the data set size so that this runs faster
+nu = 4; nm = 5; nf = 3
+X = X[:nm,:nf]
+Theta = Theta[:nu,:nf]
+Y = Y[:nm,:nu]
+R = R[:nm,:nu]
+
+X.shape, Theta.shape
+
+
+""" 2.2.1 Collaborative filtering cost function """
+def serialize(X, Theta):
+    '''Expand parameters'''
+    return np.r_[X.flatten(),Theta.flatten()]
+
+def deserialize(seq, nm, nu, nf):
+    """extract parameter"""
+    return seq[:nm*nf].reshape(nm, nf), seq[nm*nf:].reshape(nu, nf)
+
+
+def cofiCostFunc(params, Y, R, nm, nu, nf, l=0):
+    """
+    params: the parameter vector after being pulled into one dimension (X, Theta)
+    Y: scoring matrix (nm, nu)
+    R: 0-1 matrix, indicating whether the user has rated a movie
+    nu: number of users
+    nm: number of movies
+    nf: dimension of custom feature
+    l: lambda for regularization, 0-1. Multiplying these two, the value obtained is the predicted score of the movie we have already rated.
+    """
+    X, Theta = deserialize(params, nm, nu, nf)
+    
+    # (X @ Theta) * R means as follows: Because X @ Theta is the score we calculated with custom parameters, but some movies were originally unmanned
+    # Scored, stored in R, 0-1 said. Multiplying these two, the value obtained is the predicted score of the movie we have already rated.
+    error = 0.5*np.square((X@Theta.T - Y)*R).sum()
+    reg1 = .5*l*np.square(Theta).sum()
+    reg2 = .5*l*np.square(X).sum()
+    
+    return error + reg1 +reg2
+
+cofiCostFunc(serialize(X,Theta),Y,R,nm,nu,nf),cofiCostFunc(serialize(X,Theta),Y,R,nm,nu,nf,1.5)
+
+
+""" 2.2.2 Collaborative filtering gradient """
+def cofiGradient(params, Y, R, nm, nu, nf, l=0):
+    """
+    Calculate the gradient of X and Theta, and serialize the output。
+    """
+    X, Theta = deserialize(params, nm, nu, nf)
+    
+    X_grad = ((X@Theta.T-Y)*R)@Theta + l*X
+    Theta_grad = ((X@Theta.T-Y)*R).T@X + l*Theta
+    
+    return serialize(X_grad, Theta_grad)
+
+def checkGradient(params, Y, myR, nm, nu, nf, l = 0.):
+    """
+    Let's check my gradient computation real quick
+    """
+    print('Numerical Gradient \t cofiGrad \t\t Difference')
+    
+    # The analyzed gradient
+    grad = cofiGradient(params,Y,myR,nm,nu,nf,l)
+    
+    # Use the tiny e to calculate the numerical gradient
+    e = 0.0001
+    nparams = len(params)
+    e_vec = np.zeros(nparams)
+
+    # Choose 10 random elements of param vector and compute the numerical gradient
+    # Only one value in e_vec can be changed at a time, and it must be restored after calculating the numerical gradient
+    for i in range(10):
+        idx = np.random.randint(0,nparams)
+        e_vec[idx] = e
+        loss1 = cofiCostFunc(params-e_vec,Y,myR,nm,nu,nf,l)
+        loss2 = cofiCostFunc(params+e_vec,Y,myR,nm,nu,nf,l)
+        numgrad = (loss2 - loss1) / (2*e)
+        e_vec[idx] = 0
+        diff = np.linalg.norm(numgrad - grad[idx]) / np.linalg.norm(numgrad + grad[idx])
+        print('%0.15f \t %0.15f \t %0.15f' %(numgrad, grad[idx], diff))
+
+print("Checking gradient with lambda = 0...")
+checkGradient(serialize(X,Theta), Y, R, nm, nu, nf)
+print("\nChecking gradient with lambda = 1.5...")
+checkGradient(serialize(X,Theta), Y, R, nm, nu, nf, l=1.5)
+
+
+""" 2.3 Learning movie recommendations """
+movies = []  # Contains a list of all movies
+with open('D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/movie_ids.txt','r') as f:
+    for line in f:
+# movies.append(' '.join(line.strip().split(' ')[1:]))
+        movies.append(' '.join(line.strip().split(' ')[1:]))
+
+
+my_ratings = np.zeros((1682,1))
+
+my_ratings[0]   = 4
+my_ratings[97]  = 2
+my_ratings[6]   = 3
+my_ratings[11]  = 5
+my_ratings[53]  = 4
+my_ratings[63]  = 5
+my_ratings[65]  = 3
+my_ratings[68]  = 5
+my_ratings[182] = 4
+my_ratings[225] = 5
+my_ratings[354] = 5
+
+for i in range(len(my_ratings)):
+    if my_ratings[i] > 0:
+        print(my_ratings[i], movies[i])
+        
+        
+mat = loadmat('D:/BOOKS/Machine Learning/Andrew Ng/Week9/machine-learning-ex8/ex8/ex8_movies.mat')
+Y, R = mat['Y'], mat['R']
+Y.shape, R.shape
+
+Y = np.c_[Y, my_ratings]  # (1682, 944)
+R = np.c_[R, my_ratings!=0]  # (1682, 944)
+nm, nu = Y.shape
+
+nf = 10 # We use 10-dimensional feature vectors
+
+
+def normalizeRatings(Y, R):
+    """
+    The mean is only counting movies that were rated
+    """
+    Ymean = (Y.sum(axis=1) / R.sum(axis=1)).reshape(-1,1)
+    Ynorm = (Y - Ymean)*R  # Also pay attention here not to normalize unscored data
+    return Ynorm, Ymean
+
+
+Ynorm, Ymean = normalizeRatings(Y, R)
+Ynorm.shape, Ymean.shape
+
+
+X = np.random.random((nm, nf))
+Theta = np.random.random((nu, nf))
+params = serialize(X, Theta)
+l = 10
+
+
+import scipy.optimize as opt
+res = opt.minimize(fun=cofiCostFunc,
+                   x0=params,
+                   args=(Y, R, nm, nu, nf, l),
+                   method='TNC',
+                   jac=cofiGradient,
+                   options={'maxiter': 100})
+
+ret = res.x
+
+# import scipy.optimize as opt
+# ret = opt.fmin_cg(cofiCostFunc, x0=params, fprime=cofiGradient, 
+#                   args=(Y, R, nm, nu, nf, l), maxiter=100)
+
+fit_X, fit_Theta = deserialize(ret, nm, nu, nf)
+
+
+""" 2.3.1 Recommendations """
+# Theater score matrix for all users
+pred_mat = fit_X @ fit_Theta.T
+
+# The predicted score of the last user, which is the user we just added
+pred = pred_mat[:,-1] + Ymean.flatten()
+
+pred_sorted_idx = np.argsort(pred)[::-1] # Sort and flip to arrange from largest to smallest
+
+
+print("Top recommendations for you:")
+for i in range(10):
+    print('Predicting rating %0.1f for movie %s.' \
+          %(pred[pred_sorted_idx[i]],movies[pred_sorted_idx[i]]))
+
+print("\nOriginal ratings provided:")
+for i in range(len(my_ratings)):
+    if my_ratings[i] > 0:
+        print('Rated %d for movie %s.'% (my_ratings[i],movies[i]))
+    
